@@ -11,12 +11,13 @@ import (
 	"syscall"
 	"time"
 
+	httpserver "github.com/code-corhuila/lms-catalog-api/internal/adapter/in/httpapi"
+	"github.com/code-corhuila/lms-catalog-api/internal/adapter/in/httpapi/handler"
+	"github.com/code-corhuila/lms-catalog-api/internal/adapter/out/idempotency"
+	"github.com/code-corhuila/lms-catalog-api/internal/adapter/out/persistence"
 	"github.com/code-corhuila/lms-catalog-api/internal/application/usecase"
 	"github.com/code-corhuila/lms-catalog-api/internal/config"
-	httpserver "github.com/code-corhuila/lms-catalog-api/internal/infrastructure/http"
-	"github.com/code-corhuila/lms-catalog-api/internal/infrastructure/http/handler"
 	"github.com/code-corhuila/lms-catalog-api/internal/infrastructure/logger"
-	"github.com/code-corhuila/lms-catalog-api/internal/infrastructure/postgres"
 )
 
 func main() {
@@ -42,15 +43,16 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	pool, err := postgres.NewPool(ctx, cfg.DSN())
+	pool, err := persistence.NewPool(ctx, cfg.DSN())
 	if err != nil {
 		log.Errorw("failed to connect to database", "error", err)
 		return err
 	}
 	defer pool.Close()
 
-	bookRepo := postgres.NewBookRepository(pool)
-	createBookUseCase := usecase.NewCreateBook(bookRepo)
+	bookRepo := persistence.NewBookRepository(pool)
+	idempotencyStore := idempotency.NewMemoryStore()
+	createBookUseCase := usecase.NewCreateBook(bookRepo, idempotencyStore)
 	loanBookCopyUseCase := usecase.NewLoanBookCopy(bookRepo)
 	returnBookCopyUseCase := usecase.NewReturnBookCopy(bookRepo)
 	bookHandler := handler.NewBookHandler(createBookUseCase, loanBookCopyUseCase, returnBookCopyUseCase)
