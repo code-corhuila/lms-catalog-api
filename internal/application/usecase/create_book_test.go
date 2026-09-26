@@ -44,11 +44,30 @@ func (f *fakeBookRepository) Save(_ context.Context, b *catalog.Book) error {
 	return nil
 }
 
+// fakeIdempotencyStore — Fake test double (11-quality/tdd-guide.md).
+type fakeIdempotencyStore struct {
+	byKey map[string]string
+}
+
+func newFakeIdempotencyStore() *fakeIdempotencyStore {
+	return &fakeIdempotencyStore{byKey: map[string]string{}}
+}
+
+func (f *fakeIdempotencyStore) Get(_ context.Context, key string) (string, bool, error) {
+	id, ok := f.byKey[key]
+	return id, ok, nil
+}
+
+func (f *fakeIdempotencyStore) Save(_ context.Context, key, bookID string) error {
+	f.byKey[key] = bookID
+	return nil
+}
+
 func TestCreateBook_InitializesAvailabilityToTotalCopies(t *testing.T) {
 	repo := newFakeBookRepository()
-	uc := usecase.NewCreateBook(repo)
+	uc := usecase.NewCreateBook(repo, newFakeIdempotencyStore())
 
-	book, err := uc.Execute(context.Background(), "Clean Code", "Robert C. Martin", "978-0132350884", "Software", 2008, 3)
+	book, _, err := uc.Execute(context.Background(), "Clean Code", "Robert C. Martin", "978-0132350884", "Software", 2008, 3, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -60,15 +79,41 @@ func TestCreateBook_InitializesAvailabilityToTotalCopies(t *testing.T) {
 func TestCreateBook_RejectsDuplicateISBN(t *testing.T) {
 	// FR-008: reject registration when the ISBN is already registered.
 	repo := newFakeBookRepository()
-	uc := usecase.NewCreateBook(repo)
+	uc := usecase.NewCreateBook(repo, newFakeIdempotencyStore())
 
-	_, err := uc.Execute(context.Background(), "Book A", "Author A", "978-0132350884", "Cat", 2020, 1)
+	_, _, err := uc.Execute(context.Background(), "Book A", "Author A", "978-0132350884", "Cat", 2020, 1, "")
 	if err != nil {
 		t.Fatalf("unexpected error on first registration: %v", err)
 	}
 
-	_, err = uc.Execute(context.Background(), "Book B", "Author B", "978-0132350884", "Cat", 2021, 2)
+	_, _, err = uc.Execute(context.Background(), "Book B", "Author B", "978-0132350884", "Cat", 2021, 2, "")
 	if err != usecase.ErrISBNAlreadyExists {
 		t.Fatalf("expected ErrISBNAlreadyExists, got %v", err)
+	}
+}
+
+func TestCreateBook_RepeatedIdempotencyKeyReplaysTheOriginal(t *testing.T) {
+	// rules/2-anexos/C-api-hexagonal.md, numeral 5.3.8: a retry carrying the
+	// same Idempotency-Key must return the original book, not a new one.
+	repo := newFakeBookRepository()
+	uc := usecase.NewCreateBook(repo, newFakeIdempotencyStore())
+
+	first, replayed, err := uc.Execute(context.Background(), "Clean Code", "Robert C. Martin", "978-0132350884", "Software", 2008, 3, "retry-key-1")
+	if err != nil {
+		t.Fatalf("unexpected error on first registration: %v", err)
+	}
+	if replayed {
+		t.Fatal("first registration must not be reported as replayed")
+	}
+
+	second, replayed, err := uc.Execute(context.Background(), "Clean Code", "Robert C. Martin", "978-0132350884", "Software", 2008, 3, "retry-key-1")
+	if err != nil {
+		t.Fatalf("unexpected error on retried registration: %v", err)
+	}
+	if !replayed {
+		t.Fatal("expected the retry to be reported as replayed")
+	}
+	if second.ID != first.ID {
+		t.Fatalf("expected the retry to return the original book %s, got %s", first.ID, second.ID)
 	}
 }
