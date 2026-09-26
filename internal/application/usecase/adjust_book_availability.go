@@ -3,6 +3,7 @@ package usecase
 import (
 	"context"
 
+	out "github.com/code-corhuila/lms-catalog-api/internal/application/port/out"
 	"github.com/code-corhuila/lms-catalog-api/internal/domain/catalog"
 )
 
@@ -11,10 +12,10 @@ import (
 // longer call BookRepository directly now that Book lives in a different
 // database (library-docs/09-microservices/service-boundary-rules.md).
 type LoanBookCopy struct {
-	Books catalog.BookRepository
+	Books out.BookRepository
 }
 
-func NewLoanBookCopy(books catalog.BookRepository) *LoanBookCopy {
+func NewLoanBookCopy(books out.BookRepository) *LoanBookCopy {
 	return &LoanBookCopy{Books: books}
 }
 
@@ -33,10 +34,10 @@ func (uc *LoanBookCopy) Execute(ctx context.Context, id string) (*catalog.Book, 
 }
 
 type ReturnBookCopy struct {
-	Books catalog.BookRepository
+	Books out.BookRepository
 }
 
-func NewReturnBookCopy(books catalog.BookRepository) *ReturnBookCopy {
+func NewReturnBookCopy(books out.BookRepository) *ReturnBookCopy {
 	return &ReturnBookCopy{Books: books}
 }
 
