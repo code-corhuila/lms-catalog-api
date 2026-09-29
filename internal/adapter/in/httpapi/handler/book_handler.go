@@ -5,14 +5,15 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/code-corhuila/lms-catalog-api/internal/adapter/in/httpapi/middleware"
+	"github.com/code-corhuila/lms-catalog-api/internal/adapter/in/httpapi/response"
 	in "github.com/code-corhuila/lms-catalog-api/internal/application/port/in"
 	"github.com/code-corhuila/lms-catalog-api/internal/application/usecase"
 	"github.com/code-corhuila/lms-catalog-api/internal/domain/catalog"
-	"github.com/code-corhuila/lms-catalog-api/internal/adapter/in/httpapi/middleware"
-	"github.com/code-corhuila/lms-catalog-api/internal/adapter/in/httpapi/response"
 )
 
 // BookHandler implements the /books endpoints (HU-04). It depends on
@@ -22,10 +23,25 @@ type BookHandler struct {
 	createBook     in.CreateBookUseCase
 	loanBookCopy   in.LoanBookCopyUseCase
 	returnBookCopy in.ReturnBookCopyUseCase
+	searchBooks    in.SearchBooksUseCase
 }
 
-func NewBookHandler(createBook in.CreateBookUseCase, loanBookCopy in.LoanBookCopyUseCase, returnBookCopy in.ReturnBookCopyUseCase) *BookHandler {
-	return &BookHandler{createBook: createBook, loanBookCopy: loanBookCopy, returnBookCopy: returnBookCopy}
+func NewBookHandler(createBook in.CreateBookUseCase, loanBookCopy in.LoanBookCopyUseCase, returnBookCopy in.ReturnBookCopyUseCase, searchBooks in.SearchBooksUseCase) *BookHandler {
+	return &BookHandler{createBook: createBook, loanBookCopy: loanBookCopy, returnBookCopy: returnBookCopy, searchBooks: searchBooks}
+}
+
+func clampPage(page int) int {
+	if page < 1 {
+		return 1
+	}
+	return page
+}
+
+func clampLimit(limit int) int {
+	if limit < 1 || limit > 100 {
+		return 20
+	}
+	return limit
 }
 
 type createBookRequest struct {
@@ -112,7 +128,10 @@ func (h *BookHandler) LoanCopy(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, http.StatusNotFound, "NOT_FOUND", "Book not found", traceID)
 		return
 	case errors.Is(err, catalog.ErrNoCopiesAvailable):
-		response.Error(w, http.StatusConflict, "NO_COPIES_AVAILABLE", "There are no available copies of this book", traceID)
+		// 422, not 409 — a domain rule (INV-001) forbids the loan, the
+		// request itself doesn't collide with existing state
+		// (rules/2-anexos/C-api-hexagonal.md, numeral 5.3.11 / D-G08).
+		response.Error(w, http.StatusUnprocessableEntity, "NO_COPIES_AVAILABLE", "There are no available copies of this book", traceID)
 		return
 	case err != nil:
 		response.Error(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal server error", traceID)
@@ -120,6 +139,47 @@ func (h *BookHandler) LoanCopy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.JSON(w, http.StatusOK, toBookResponse(book))
+}
+
+// List — GET /books (HU-04, search half). meta carries the full
+// {total, page, limit, totalPages} envelope, echoing the page/limit actually
+// served after clamping (rules/2-anexos/C-api-hexagonal.md, "Listados").
+func (h *BookHandler) List(w http.ResponseWriter, r *http.Request) {
+	traceID := middleware.FromContext(r.Context())
+
+	rawPage, _ := strconv.Atoi(r.URL.Query().Get("page"))
+	rawLimit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	search := r.URL.Query().Get("search")
+	category := r.URL.Query().Get("category")
+
+	page := clampPage(rawPage)
+	limit := clampLimit(rawLimit)
+
+	books, total, err := h.searchBooks.Execute(r.Context(), search, category, page, limit)
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal server error", traceID)
+		return
+	}
+
+	items := make([]bookResponse, 0, len(books))
+	for _, b := range books {
+		items = append(items, toBookResponse(b))
+	}
+
+	totalPages := 0
+	if total > 0 {
+		totalPages = (total + limit - 1) / limit
+	}
+
+	response.JSON(w, http.StatusOK, map[string]any{
+		"data": items,
+		"meta": map[string]any{
+			"total":      total,
+			"page":       page,
+			"limit":      limit,
+			"totalPages": totalPages,
+		},
+	})
 }
 
 // ReturnCopy — POST /books/{id}/return-copy. Called by circulation-service
