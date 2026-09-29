@@ -30,3 +30,8 @@ type LoanBookCopyUseCase interface {
 type ReturnBookCopyUseCase interface {
 	Execute(ctx context.Context, id string) (*catalog.Book, error)
 }
+
+// SearchBooksUseCase lists Books with a bounded, offset-paginated search (HU-04).
+type SearchBooksUseCase interface {
+	Execute(ctx context.Context, query, category string, page, limit int) (books []*catalog.Book, total int, err error)
+}
