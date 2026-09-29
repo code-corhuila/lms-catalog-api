@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strconv"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -12,7 +13,7 @@ import (
 )
 
 // BookRepository implements catalog.BookRepository against PostgreSQL — the
-// only code allowed to touch the `books` table
+// only code allowed to touch the `catalog.book` table
 // (library-docs/09-microservices/service-boundary-rules.md).
 type BookRepository struct {
 	db *pgxpool.Pool
@@ -33,7 +34,15 @@ func scanBook(row pgx.Row) (*catalog.Book, error) {
 }
 
 func (r *BookRepository) FindByID(ctx context.Context, id string) (*catalog.Book, error) {
-	query := `SELECT ` + bookColumns + ` FROM books WHERE id = $1`
+	// A malformed id (not a UUID at all) is "not found", not a server error —
+	// without this, postgres's own "invalid input syntax for type uuid"
+	// surfaces as a raw driver error the handler can't distinguish from a
+	// real failure, and the caller gets a 500 for what's really a 404.
+	if _, err := uuid.Parse(id); err != nil {
+		return nil, catalog.ErrBookNotFound
+	}
+
+	query := `SELECT ` + bookColumns + ` FROM catalog.book WHERE id = $1`
 	b, err := scanBook(r.db.QueryRow(ctx, query, id))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, catalog.ErrBookNotFound
@@ -42,7 +51,7 @@ func (r *BookRepository) FindByID(ctx context.Context, id string) (*catalog.Book
 }
 
 func (r *BookRepository) FindByISBN(ctx context.Context, isbn string) (*catalog.Book, error) {
-	query := `SELECT ` + bookColumns + ` FROM books WHERE isbn = $1`
+	query := `SELECT ` + bookColumns + ` FROM catalog.book WHERE isbn = $1`
 	b, err := scanBook(r.db.QueryRow(ctx, query, isbn))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, catalog.ErrBookNotFound
@@ -52,8 +61,8 @@ func (r *BookRepository) FindByISBN(ctx context.Context, isbn string) (*catalog.
 
 func (r *BookRepository) Search(ctx context.Context, q, category string, page, limit int) ([]*catalog.Book, int, error) {
 	offset := (page - 1) * limit
-	query := `SELECT ` + bookColumns + ` FROM books WHERE 1=1`
-	countQuery := `SELECT count(*) FROM books WHERE 1=1`
+	query := `SELECT ` + bookColumns + ` FROM catalog.book WHERE 1=1`
+	countQuery := `SELECT count(*) FROM catalog.book WHERE 1=1`
 	var args []any
 
 	if q != "" {
@@ -97,7 +106,7 @@ func (r *BookRepository) Search(ctx context.Context, q, category string, page, l
 
 func (r *BookRepository) Save(ctx context.Context, b *catalog.Book) error {
 	const query = `
-		INSERT INTO books (id, title, author, isbn, category, year, total_copies, available_copies, created_at, updated_at)
+		INSERT INTO catalog.book (id, title, author, isbn, category, year, total_copies, available_copies, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		ON CONFLICT (id) DO UPDATE SET
 			title = EXCLUDED.title,
