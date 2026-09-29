@@ -35,23 +35,27 @@ internal/
 ├── adapter/
 │   ├── in/httpapi/               → chi router, middleware, handlers, response envelope
 │   └── out/
-│       ├── persistence/           → BookRepository against PostgreSQL
-│       └── idempotency/             → provisional in-memory IdempotencyStore (see below)
+│       └── persistence/           → BookRepository and IdempotencyStore, both against PostgreSQL
 └── infrastructure/logger/        → structured (zap) logger — not a port implementation
 ```
 
+## Authentication
+
+Two algorithms, each with its own key (`rules/2-anexos/C-api-hexagonal.md`, numeral 5.3.7):
+**RS256**, verified with `lms-access-api`'s public key (`JWT_PUBLIC_KEY`), for a real
+Administrator session; **HS256**, verified with a separate `INTERNAL_JWT_SECRET`, for the tokens
+`lms-circulation-api` mints to call this service's `/books/{id}/loan-copy` and `/return-copy` —
+this service only validates, it never mints one itself. Never the same key for both — see
+`internal/adapter/in/httpapi/middleware/auth.go`'s doc comment for why.
+
 ## Known gaps against `rules/2-anexos/C-api-hexagonal.md`
 
-- **Idempotent creation is provisional.** `POST /books` honors `Idempotency-Key`, but
-  `internal/adapter/out/idempotency` is an in-memory map — it does not survive a restart and
-  does not coordinate across more than one running instance. The durable version needs
-  `lms-catalog-db`'s own `idempotency_key` table, which doesn't exist yet
-  (`ADR-010-liquibase-for-database-migrations.md`).
-- **Auth stays HS256/shared-secret, not RS256/public-key.** Switching needs a coordinated change
-  with `lms-access-api` (the token issuer) — tracked separately.
-- **No `GET /books` collection endpoint yet** — already a declared gap in
-  `library-docs/07-api/guidelines.md`, so the pagination fix this norm otherwise requires (`meta`
-  echoing `page`/`limit`/`totalPages`) has nothing to apply to in this service today.
+- **Idempotent creation is durable now, not provisional.** `POST /books` honors
+  `Idempotency-Key` against `catalog.idempotency_key` (`lms-catalog-db`).
+- **`GET /books` now exists** (`SearchBooks` use case, same offset-pagination envelope as
+  `lms-membership-api`'s `GET /students` — `meta` echoing `page`/`limit`/`totalPages`). Was a
+  declared gap; closed after local end-to-end testing showed `lms-catalog-portal`'s
+  `BooksListPage` had nothing to call.
 
 ---
 
