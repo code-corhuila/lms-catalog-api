@@ -13,7 +13,6 @@ import (
 
 	httpserver "github.com/code-corhuila/lms-catalog-api/internal/adapter/in/httpapi"
 	"github.com/code-corhuila/lms-catalog-api/internal/adapter/in/httpapi/handler"
-	"github.com/code-corhuila/lms-catalog-api/internal/adapter/out/idempotency"
 	"github.com/code-corhuila/lms-catalog-api/internal/adapter/out/persistence"
 	"github.com/code-corhuila/lms-catalog-api/internal/application/usecase"
 	"github.com/code-corhuila/lms-catalog-api/internal/config"
@@ -51,17 +50,19 @@ func run() error {
 	defer pool.Close()
 
 	bookRepo := persistence.NewBookRepository(pool)
-	idempotencyStore := idempotency.NewMemoryStore()
+	idempotencyStore := persistence.NewIdempotencyStore(pool)
 	createBookUseCase := usecase.NewCreateBook(bookRepo, idempotencyStore)
 	loanBookCopyUseCase := usecase.NewLoanBookCopy(bookRepo)
 	returnBookCopyUseCase := usecase.NewReturnBookCopy(bookRepo)
-	bookHandler := handler.NewBookHandler(createBookUseCase, loanBookCopyUseCase, returnBookCopyUseCase)
+	searchBooksUseCase := usecase.NewSearchBooks(bookRepo)
+	bookHandler := handler.NewBookHandler(createBookUseCase, loanBookCopyUseCase, returnBookCopyUseCase, searchBooksUseCase)
 
 	router := httpserver.NewRouter(httpserver.RouterConfig{
-		DB:         pool,
-		JWTSecret:  cfg.JWTSecret,
-		CORSOrigin: cfg.CORSOrigin,
-		Books:      bookHandler,
+		DB:                pool,
+		JWTPublicKey:      cfg.JWTPublicKey,
+		InternalJWTSecret: cfg.InternalJWTSecret,
+		CORSOrigin:        cfg.CORSOrigin,
+		Books:             bookHandler,
 	})
 
 	srv := &http.Server{

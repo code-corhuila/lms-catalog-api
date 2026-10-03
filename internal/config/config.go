@@ -3,9 +3,13 @@
 package config
 
 import (
+	"crypto/rsa"
 	"fmt"
 	"os"
+	"strings"
 	"time"
+
+	"github.com/golang-jwt/jwt/v5"
 )
 
 type Config struct {
@@ -17,8 +21,16 @@ type Config struct {
 	DBPassword string
 	DBName     string
 
-	JWTSecret string
-	JWTExpiry time.Duration
+	// JWTPublicKey validates a real Administrator session token, issued by
+	// lms-access-api and signed RS256 — this service never holds the private
+	// key (rules/2-anexos/C-api-hexagonal.md, numeral 5.3.7).
+	JWTPublicKey *rsa.PublicKey
+	// InternalJWTSecret is a second, deliberately separate secret: only for
+	// the short-lived HS256 tokens lms-circulation-api mints to call this
+	// service's /books/{id}/loan-copy and /return-copy. This service never
+	// mints one itself — it only validates.
+	InternalJWTSecret string
+	JWTExpiry         time.Duration
 
 	LogLevel   string
 	CORSOrigin string
@@ -30,6 +42,15 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("invalid JWT_EXPIRY: %w", err)
 	}
 
+	publicKeyPEM := getEnv("JWT_PUBLIC_KEY", "")
+	if publicKeyPEM == "" {
+		return nil, fmt.Errorf("JWT_PUBLIC_KEY must be set")
+	}
+	publicKey, err := jwt.ParseRSAPublicKeyFromPEM([]byte(strings.ReplaceAll(publicKeyPEM, `\n`, "\n")))
+	if err != nil {
+		return nil, fmt.Errorf("invalid JWT_PUBLIC_KEY: %w", err)
+	}
+
 	cfg := &Config{
 		Port: getEnv("PORT", "8080"),
 
@@ -39,15 +60,16 @@ func Load() (*Config, error) {
 		DBPassword: getEnv("DB_PASSWORD", "lms_password"),
 		DBName:     getEnv("DB_NAME", "lms_db"),
 
-		JWTSecret: getEnv("JWT_SECRET", ""),
-		JWTExpiry: jwtExpiry,
+		JWTPublicKey:      publicKey,
+		InternalJWTSecret: getEnv("INTERNAL_JWT_SECRET", ""),
+		JWTExpiry:         jwtExpiry,
 
 		LogLevel:   getEnv("LOG_LEVEL", "info"),
 		CORSOrigin: getEnv("CORS_ORIGIN", "*"),
 	}
 
-	if cfg.JWTSecret == "" {
-		return nil, fmt.Errorf("JWT_SECRET must be set")
+	if cfg.InternalJWTSecret == "" {
+		return nil, fmt.Errorf("INTERNAL_JWT_SECRET must be set")
 	}
 
 	return cfg, nil

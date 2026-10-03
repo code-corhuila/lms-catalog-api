@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"crypto/rsa"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -13,10 +14,11 @@ import (
 
 // RouterConfig carries what the router needs to wire itself.
 type RouterConfig struct {
-	DB         *pgxpool.Pool
-	JWTSecret  string
-	CORSOrigin string
-	Books      *handler.BookHandler
+	DB                *pgxpool.Pool
+	JWTPublicKey      *rsa.PublicKey
+	InternalJWTSecret string
+	CORSOrigin        string
+	Books             *handler.BookHandler
 }
 
 // NewRouter builds the chi router with the base middleware stack, health
@@ -34,10 +36,11 @@ func NewRouter(cfg RouterConfig) http.Handler {
 
 	r.Route("/api/v1", func(api chi.Router) {
 		api.Group(func(protected chi.Router) {
-			protected.Use(middleware.RequireAuth(cfg.JWTSecret))
+			protected.Use(middleware.RequireAuth(cfg.JWTPublicKey, cfg.InternalJWTSecret))
 
 			protected.Route("/books", func(books chi.Router) {
-				books.Post("/", cfg.Books.Create)                    // HU-04
+				books.Post("/", cfg.Books.Create)                     // HU-04
+				books.Get("/", cfg.Books.List)                        // HU-04, search half
 				books.Post("/{id}/loan-copy", cfg.Books.LoanCopy)     // needed by circulation-service
 				books.Post("/{id}/return-copy", cfg.Books.ReturnCopy) // needed by circulation-service
 			})
