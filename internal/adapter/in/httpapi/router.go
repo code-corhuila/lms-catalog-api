@@ -14,11 +14,12 @@ import (
 
 // RouterConfig carries what the router needs to wire itself.
 type RouterConfig struct {
-	DB                *pgxpool.Pool
-	JWTPublicKey      *rsa.PublicKey
-	InternalJWTSecret string
-	CORSOrigin        string
-	Books             *handler.BookHandler
+	DB                          *pgxpool.Pool
+	JWTPublicKey                *rsa.PublicKey
+	InternalJWTSecret           string
+	CORSOrigin                  string
+	Books                       *handler.BookHandler
+	FeatureCatalogSearchEnabled bool
 }
 
 // NewRouter builds the chi router with the base middleware stack, health
@@ -39,8 +40,16 @@ func NewRouter(cfg RouterConfig) http.Handler {
 			protected.Use(middleware.RequireAuth(cfg.JWTPublicKey, cfg.InternalJWTSecret))
 
 			protected.Route("/books", func(books chi.Router) {
-				books.Post("/", cfg.Books.Create)                     // HU-04
-				books.Get("/", cfg.Books.List)                        // HU-04, search half
+				books.Post("/", cfg.Books.Create) // HU-04
+				// FEATURE_CATALOG_SEARCH_ENABLED (week 9, config hardening):
+				// default on; exists so search can be turned off per-
+				// environment without a deploy. When off, GET isn't
+				// registered on this path at all — verified directly:
+				// chi answers 405 (the path exists for POST), not a 5xx
+				// from a half-wired handler.
+				if cfg.FeatureCatalogSearchEnabled {
+					books.Get("/", cfg.Books.List) // HU-04, search half
+				}
 				books.Post("/{id}/loan-copy", cfg.Books.LoanCopy)     // needed by circulation-service
 				books.Post("/{id}/return-copy", cfg.Books.ReturnCopy) // needed by circulation-service
 			})
