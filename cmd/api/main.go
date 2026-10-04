@@ -58,11 +58,12 @@ func run() error {
 	bookHandler := handler.NewBookHandler(createBookUseCase, loanBookCopyUseCase, returnBookCopyUseCase, searchBooksUseCase)
 
 	router := httpserver.NewRouter(httpserver.RouterConfig{
-		DB:                pool,
-		JWTPublicKey:      cfg.JWTPublicKey,
-		InternalJWTSecret: cfg.InternalJWTSecret,
-		CORSOrigin:        cfg.CORSOrigin,
-		Books:             bookHandler,
+		DB:                          pool,
+		JWTPublicKey:                cfg.JWTPublicKey,
+		InternalJWTSecret:           cfg.InternalJWTSecret,
+		CORSOrigin:                  cfg.CORSOrigin,
+		Books:                       bookHandler,
+		FeatureCatalogSearchEnabled: cfg.FeatureCatalogSearchEnabled,
 	})
 
 	srv := &http.Server{
