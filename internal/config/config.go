@@ -6,6 +6,7 @@ import (
 	"crypto/rsa"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -34,6 +35,15 @@ type Config struct {
 
 	LogLevel   string
 	CORSOrigin string
+
+	// FeatureCatalogSearchEnabled gates GET /books (week 9, config
+	// hardening — "at least one feature flag guarding a new capability").
+	// Default true: the capability ships on; the flag exists so it can be
+	// turned off per-environment without a deploy if search needs to come
+	// down (e.g. a bad query pattern hammering the DB) without taking the
+	// rest of the service with it. Naming/ownership/removal policy →
+	// 09-week/hu-status/FEATURE-FLAG-POLICY.md in the status repo.
+	FeatureCatalogSearchEnabled bool
 }
 
 func Load() (*Config, error) {
@@ -66,6 +76,8 @@ func Load() (*Config, error) {
 
 		LogLevel:   getEnv("LOG_LEVEL", "info"),
 		CORSOrigin: getEnv("CORS_ORIGIN", "*"),
+
+		FeatureCatalogSearchEnabled: getBoolEnv("FEATURE_CATALOG_SEARCH_ENABLED", true),
 	}
 
 	if cfg.InternalJWTSecret == "" {
@@ -88,4 +100,16 @@ func getEnv(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+func getBoolEnv(key string, fallback bool) bool {
+	v, ok := os.LookupEnv(key)
+	if !ok || v == "" {
+		return fallback
+	}
+	parsed, err := strconv.ParseBool(v)
+	if err != nil {
+		return fallback
+	}
+	return parsed
 }
