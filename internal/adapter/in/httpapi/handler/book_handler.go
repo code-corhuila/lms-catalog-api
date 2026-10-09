@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 
@@ -21,13 +22,14 @@ import (
 // (rules/2-anexos/C-api-hexagonal.md).
 type BookHandler struct {
 	createBook     in.CreateBookUseCase
+	updateBook     in.UpdateBookUseCase
 	loanBookCopy   in.LoanBookCopyUseCase
 	returnBookCopy in.ReturnBookCopyUseCase
 	searchBooks    in.SearchBooksUseCase
 }
 
-func NewBookHandler(createBook in.CreateBookUseCase, loanBookCopy in.LoanBookCopyUseCase, returnBookCopy in.ReturnBookCopyUseCase, searchBooks in.SearchBooksUseCase) *BookHandler {
-	return &BookHandler{createBook: createBook, loanBookCopy: loanBookCopy, returnBookCopy: returnBookCopy, searchBooks: searchBooks}
+func NewBookHandler(createBook in.CreateBookUseCase, updateBook in.UpdateBookUseCase, loanBookCopy in.LoanBookCopyUseCase, returnBookCopy in.ReturnBookCopyUseCase, searchBooks in.SearchBooksUseCase) *BookHandler {
+	return &BookHandler{createBook: createBook, updateBook: updateBook, loanBookCopy: loanBookCopy, returnBookCopy: returnBookCopy, searchBooks: searchBooks}
 }
 
 func clampPage(page int) int {
@@ -51,6 +53,14 @@ type createBookRequest struct {
 	Category    string `json:"category"`
 	Year        int    `json:"year"`
 	TotalCopies int    `json:"totalCopies"`
+}
+
+// updateBookRequest has no isbn on purpose — see usecase.UpdateBook's doc comment.
+type updateBookRequest struct {
+	Title    string `json:"title"`
+	Author   string `json:"author"`
+	Category string `json:"category"`
+	Year     int    `json:"year"`
 }
 
 const timeFormat = "2006-01-02T15:04:05Z07:00"
@@ -114,6 +124,46 @@ func (h *BookHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Location", fmt.Sprintf("/api/v1/books/%s", book.ID))
 	response.JSON(w, http.StatusCreated, toBookResponse(book))
+}
+
+// Update — PATCH /books/{id} (HU-09, FR-011, FR-012). Title and author are
+// checked here first so lms-catalog-portal can flag each field from details
+// (rules/2-anexos/C-api-hexagonal.md, "Validación en la frontera").
+func (h *BookHandler) Update(w http.ResponseWriter, r *http.Request) {
+	traceID := middleware.FromContext(r.Context())
+	id := chi.URLParam(r, "id")
+
+	var req updateBookRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid request body", traceID)
+		return
+	}
+
+	var details []response.FieldDetail
+	if strings.TrimSpace(req.Title) == "" {
+		details = append(details, response.FieldDetail{Field: "title", Message: "title must not be empty"})
+	}
+	if strings.TrimSpace(req.Author) == "" {
+		details = append(details, response.FieldDetail{Field: "author", Message: "author must not be empty"})
+	}
+	if len(details) > 0 {
+		response.ValidationError(w, traceID, details...)
+		return
+	}
+
+	book, err := h.updateBook.Execute(r.Context(), id, req.Title, req.Author, req.Category, req.Year)
+	switch {
+	case errors.Is(err, catalog.ErrBookNotFound):
+		response.Error(w, http.StatusNotFound, "NOT_FOUND", "Book not found", traceID)
+		return
+	case err != nil:
+		// Book.Update's only rules (title/author) were already checked above,
+		// so whatever is left is infrastructure, not the request.
+		response.Error(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal server error", traceID)
+		return
+	}
+
+	response.JSON(w, http.StatusOK, toBookResponse(book))
 }
 
 // LoanCopy — POST /books/{id}/loan-copy. Called by circulation-service when

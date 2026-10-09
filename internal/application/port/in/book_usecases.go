@@ -19,6 +19,12 @@ type CreateBookUseCase interface {
 	Execute(ctx context.Context, title, author, isbn, category string, year, totalCopies int, idempotencyKey string) (book *catalog.Book, replayed bool, err error)
 }
 
+// UpdateBookUseCase edits a Book's title, author, category and year (HU-09).
+// ISBN is not a parameter — it is immutable through this action (FR-012).
+type UpdateBookUseCase interface {
+	Execute(ctx context.Context, id, title, author, category string, year int) (*catalog.Book, error)
+}
+
 // LoanBookCopyUseCase decrements a Book's availability — called by
 // circulation-service when registering a loan (HU-06).
 type LoanBookCopyUseCase interface {

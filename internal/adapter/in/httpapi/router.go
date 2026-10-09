@@ -50,6 +50,7 @@ func NewRouter(cfg RouterConfig) http.Handler {
 				if cfg.FeatureCatalogSearchEnabled {
 					books.Get("/", cfg.Books.List) // HU-04, search half
 				}
+				books.Patch("/{id}", cfg.Books.Update)                // HU-09
 				books.Post("/{id}/loan-copy", cfg.Books.LoanCopy)     // needed by circulation-service
 				books.Post("/{id}/return-copy", cfg.Books.ReturnCopy) // needed by circulation-service
 			})

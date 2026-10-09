@@ -52,10 +52,11 @@ func run() error {
 	bookRepo := persistence.NewBookRepository(pool)
 	idempotencyStore := persistence.NewIdempotencyStore(pool)
 	createBookUseCase := usecase.NewCreateBook(bookRepo, idempotencyStore)
+	updateBookUseCase := usecase.NewUpdateBook(bookRepo)
 	loanBookCopyUseCase := usecase.NewLoanBookCopy(bookRepo)
 	returnBookCopyUseCase := usecase.NewReturnBookCopy(bookRepo)
 	searchBooksUseCase := usecase.NewSearchBooks(bookRepo)
-	bookHandler := handler.NewBookHandler(createBookUseCase, loanBookCopyUseCase, returnBookCopyUseCase, searchBooksUseCase)
+	bookHandler := handler.NewBookHandler(createBookUseCase, updateBookUseCase, loanBookCopyUseCase, returnBookCopyUseCase, searchBooksUseCase)
 
 	router := httpserver.NewRouter(httpserver.RouterConfig{
 		DB:                          pool,
