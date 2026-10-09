@@ -30,7 +30,7 @@ internal/
 │   ├── port/
 │   │   ├── in/                  → inbound ports the HTTP adapter depends on (book_usecases.go)
 │   │   └── out/                 → outbound ports the use cases depend on (ports.go)
-│   └── usecase/                 → CreateBook (HU-04), LoanBookCopy/ReturnBookCopy (HU-06/HU-07)
+│   └── usecase/                 → CreateBook (HU-04), UpdateBook (HU-09), LoanBookCopy/ReturnBookCopy (HU-06/HU-07)
 ├── config/                      → environment variable loading
 ├── adapter/
 │   ├── in/httpapi/               → chi router, middleware, handlers, response envelope
@@ -56,6 +56,9 @@ this service only validates, it never mints one itself. Never the same key for b
   `lms-membership-api`'s `GET /students` — `meta` echoing `page`/`limit`/`totalPages`). Was a
   declared gap; closed after local end-to-end testing showed `lms-catalog-portal`'s
   `BooksListPage` had nothing to call.
+- **`PATCH /books/{id}` now exists** (`UpdateBook` use case, HU-09 — title, author, category,
+  year; ISBN and copy counts are not editable). Was missing: `lms-catalog-portal`'s edit row
+  called it and got 404, shown as "Something went wrong".
 
 ---
 
