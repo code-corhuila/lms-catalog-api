@@ -24,10 +24,12 @@ type BookHandler struct {
 	loanBookCopy   in.LoanBookCopyUseCase
 	returnBookCopy in.ReturnBookCopyUseCase
 	searchBooks    in.SearchBooksUseCase
+	updateBook     in.UpdateBookUseCase
+	deleteBook     in.DeleteBookUseCase
 }
 
-func NewBookHandler(createBook in.CreateBookUseCase, loanBookCopy in.LoanBookCopyUseCase, returnBookCopy in.ReturnBookCopyUseCase, searchBooks in.SearchBooksUseCase) *BookHandler {
-	return &BookHandler{createBook: createBook, loanBookCopy: loanBookCopy, returnBookCopy: returnBookCopy, searchBooks: searchBooks}
+func NewBookHandler(createBook in.CreateBookUseCase, loanBookCopy in.LoanBookCopyUseCase, returnBookCopy in.ReturnBookCopyUseCase, searchBooks in.SearchBooksUseCase, updateBook in.UpdateBookUseCase, deleteBook in.DeleteBookUseCase) *BookHandler {
+	return &BookHandler{createBook: createBook, loanBookCopy: loanBookCopy, returnBookCopy: returnBookCopy, searchBooks: searchBooks, updateBook: updateBook, deleteBook: deleteBook}
 }
 
 func clampPage(page int) int {
@@ -199,4 +201,62 @@ func (h *BookHandler) ReturnCopy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.JSON(w, http.StatusOK, toBookResponse(book))
+}
+
+type updateBookRequest struct {
+	Title       string `json:"title"`
+	Author      string `json:"author"`
+	Category    string `json:"category"`
+	Year        int    `json:"year"`
+	TotalCopies int    `json:"totalCopies"`
+}
+
+// Update — PATCH /books/{id} (HU-09). ISBN is intentionally not editable.
+func (h *BookHandler) Update(w http.ResponseWriter, r *http.Request) {
+	traceID := middleware.FromContext(r.Context())
+	id := chi.URLParam(r, "id")
+
+	var req updateBookRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid request body", traceID)
+		return
+	}
+
+	book, err := h.updateBook.Execute(r.Context(), id, req.Title, req.Author, req.Category, req.Year, req.TotalCopies)
+	switch {
+	case errors.Is(err, catalog.ErrBookNotFound):
+		response.Error(w, http.StatusNotFound, "NOT_FOUND", "Book not found", traceID)
+		return
+	case errors.Is(err, catalog.ErrTotalCopiesBelowOnLoan):
+		response.Error(w, http.StatusConflict, "TOTAL_COPIES_BELOW_ON_LOAN", err.Error(), traceID)
+		return
+	case err != nil:
+		response.Error(w, http.StatusBadRequest, "VALIDATION_ERROR", err.Error(), traceID)
+		return
+	}
+
+	response.JSON(w, http.StatusOK, toBookResponse(book))
+}
+
+// Delete — DELETE /books/{id}. Rejected with 409 while copies are on loan
+// (usecase.ErrBookHasActiveLoans) — deleting out from under an open Loan
+// would orphan circulation-service's record of what was borrowed.
+func (h *BookHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	traceID := middleware.FromContext(r.Context())
+	id := chi.URLParam(r, "id")
+
+	err := h.deleteBook.Execute(r.Context(), id)
+	switch {
+	case errors.Is(err, catalog.ErrBookNotFound):
+		response.Error(w, http.StatusNotFound, "NOT_FOUND", "Book not found", traceID)
+		return
+	case errors.Is(err, usecase.ErrBookHasActiveLoans):
+		response.Error(w, http.StatusConflict, "BOOK_HAS_ACTIVE_LOANS", "Cannot delete a book that still has copies on loan", traceID)
+		return
+	case err != nil:
+		response.Error(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal server error", traceID)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
