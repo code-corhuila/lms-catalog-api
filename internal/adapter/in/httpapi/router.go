@@ -43,6 +43,8 @@ func NewRouter(cfg RouterConfig) http.Handler {
 				books.Get("/", cfg.Books.List)                        // HU-04, search half
 				books.Post("/{id}/loan-copy", cfg.Books.LoanCopy)     // needed by circulation-service
 				books.Post("/{id}/return-copy", cfg.Books.ReturnCopy) // needed by circulation-service
+				books.Patch("/{id}", cfg.Books.Update)                // HU-09
+				books.Delete("/{id}", cfg.Books.Delete)
 			})
 		})
 	})
