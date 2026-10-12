@@ -15,6 +15,7 @@ type BookRepository interface {
 	FindByISBN(ctx context.Context, isbn string) (*catalog.Book, error)
 	Search(ctx context.Context, query, category string, page, limit int) (books []*catalog.Book, total int, err error)
 	Save(ctx context.Context, b *catalog.Book) error
+	Delete(ctx context.Context, id string) error
 }
 
 // IdempotencyStore is the driven port for the idempotent-creation check
