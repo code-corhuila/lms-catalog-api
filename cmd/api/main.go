@@ -55,14 +55,17 @@ func run() error {
 	loanBookCopyUseCase := usecase.NewLoanBookCopy(bookRepo)
 	returnBookCopyUseCase := usecase.NewReturnBookCopy(bookRepo)
 	searchBooksUseCase := usecase.NewSearchBooks(bookRepo)
-	bookHandler := handler.NewBookHandler(createBookUseCase, loanBookCopyUseCase, returnBookCopyUseCase, searchBooksUseCase)
+	updateBookUseCase := usecase.NewUpdateBook(bookRepo)
+	deleteBookUseCase := usecase.NewDeleteBook(bookRepo)
+	bookHandler := handler.NewBookHandler(createBookUseCase, loanBookCopyUseCase, returnBookCopyUseCase, searchBooksUseCase, updateBookUseCase, deleteBookUseCase)
 
 	router := httpserver.NewRouter(httpserver.RouterConfig{
-		DB:                pool,
-		JWTPublicKey:      cfg.JWTPublicKey,
-		InternalJWTSecret: cfg.InternalJWTSecret,
-		CORSOrigin:        cfg.CORSOrigin,
-		Books:             bookHandler,
+		DB:                          pool,
+		JWTPublicKey:                cfg.JWTPublicKey,
+		InternalJWTSecret:           cfg.InternalJWTSecret,
+		CORSOrigin:                  cfg.CORSOrigin,
+		Books:                       bookHandler,
+		FeatureCatalogSearchEnabled: cfg.FeatureCatalogSearchEnabled,
 	})
 
 	srv := &http.Server{

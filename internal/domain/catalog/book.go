@@ -100,3 +100,25 @@ func (b *Book) Update(title, author, category string, year int) error {
 	b.UpdatedAt = time.Now().UTC()
 	return nil
 }
+
+// ErrTotalCopiesBelowOnLoan rejects lowering totalCopies below how many
+// copies are currently on loan — INV-001's invariant (availableCopies never
+// negative) would otherwise break the moment this book is returned.
+var ErrTotalCopiesBelowOnLoan = errors.New("totalCopies cannot be less than copies currently on loan")
+
+// UpdateCopies changes totalCopies (HU-09) while preserving how many copies
+// are on loan right now, so an edit here never has to know about any
+// specific Loan — it only needs the delta already encoded in this Book.
+func (b *Book) UpdateCopies(totalCopies int) error {
+	if totalCopies < 1 {
+		return errors.New("totalCopies must be at least 1")
+	}
+	onLoan := b.TotalCopies - b.AvailableCopies
+	if totalCopies < onLoan {
+		return ErrTotalCopiesBelowOnLoan
+	}
+	b.TotalCopies = totalCopies
+	b.AvailableCopies = totalCopies - onLoan
+	b.UpdatedAt = time.Now().UTC()
+	return nil
+}
