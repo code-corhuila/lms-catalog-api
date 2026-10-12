@@ -121,3 +121,18 @@ func (r *BookRepository) Save(ctx context.Context, b *catalog.Book) error {
 	_, err := r.db.Exec(ctx, query, b.ID, b.Title, b.Author, b.ISBN, b.Category, b.Year, b.TotalCopies, b.AvailableCopies, b.CreatedAt, b.UpdatedAt)
 	return err
 }
+
+func (r *BookRepository) Delete(ctx context.Context, id string) error {
+	if _, err := uuid.Parse(id); err != nil {
+		return catalog.ErrBookNotFound
+	}
+
+	tag, err := r.db.Exec(ctx, `DELETE FROM catalog.book WHERE id = $1`, id)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return catalog.ErrBookNotFound
+	}
+	return nil
+}

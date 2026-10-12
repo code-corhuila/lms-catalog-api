@@ -35,3 +35,14 @@ type ReturnBookCopyUseCase interface {
 type SearchBooksUseCase interface {
 	Execute(ctx context.Context, query, category string, page, limit int) (books []*catalog.Book, total int, err error)
 }
+
+// UpdateBookUseCase edits a Book's title, author, category, year, and
+// totalCopies (HU-09).
+type UpdateBookUseCase interface {
+	Execute(ctx context.Context, id, title, author, category string, year, totalCopies int) (*catalog.Book, error)
+}
+
+// DeleteBookUseCase removes a Book from the catalog.
+type DeleteBookUseCase interface {
+	Execute(ctx context.Context, id string) error
+}

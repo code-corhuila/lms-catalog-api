@@ -44,6 +44,16 @@ func (f *fakeBookRepository) Save(_ context.Context, b *catalog.Book) error {
 	return nil
 }
 
+func (f *fakeBookRepository) Delete(_ context.Context, id string) error {
+	b, ok := f.byID[id]
+	if !ok {
+		return catalog.ErrBookNotFound
+	}
+	delete(f.byID, id)
+	delete(f.byISBN, b.ISBN)
+	return nil
+}
+
 // fakeIdempotencyStore — Fake test double (11-quality/tdd-guide.md).
 type fakeIdempotencyStore struct {
 	byKey map[string]string
