@@ -57,6 +57,17 @@ this service only validates, it never mints one itself. Never the same key for b
   declared gap; closed after local end-to-end testing showed `lms-catalog-portal`'s
   `BooksListPage` had nothing to call.
 
+## Authorization (ADR-012)
+
+Every protected `/books` route now declares the permission it needs (`books:read` or
+`books:write`) and checks it against `lms-iam`'s `GET /api/v1/iam/authorize`
+(`internal/adapter/out/iamclient`, `internal/adapter/in/httpapi/middleware/authz.go`) — closes
+T2/SEC-04 from the week-13 security threat model.
+
+**Opt-in, additive rollout:** `IAM_SERVICE_URL` unset disables the check entirely
+(`RouterConfig.Authorizer` stays `nil`). **Fails closed:** an unreachable `lms-iam` rejects the
+request (`500`), never silently allows it through.
+
 ---
 
 ## Branching
