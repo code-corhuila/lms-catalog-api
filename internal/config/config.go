@@ -26,10 +26,11 @@ type Config struct {
 	// lms-access-api and signed RS256 — this service never holds the private
 	// key (rules/2-anexos/C-api-hexagonal.md, numeral 5.3.7).
 	JWTPublicKey *rsa.PublicKey
-	// InternalJWTSecret is a second, deliberately separate secret: only for
-	// the short-lived HS256 tokens lms-circulation-api mints to call this
-	// service's /books/{id}/loan-copy and /return-copy. This service never
-	// mints one itself — it only validates.
+	// InternalJWTSecret is a second, deliberately separate secret: for the
+	// short-lived HS256 tokens lms-circulation-api mints to call this
+	// service's /books/{id}/loan-copy and /return-copy, and — since
+	// ADR-012 — the one this service itself mints to call lms-iam's
+	// /authorize.
 	InternalJWTSecret string
 	JWTExpiry         time.Duration
 
@@ -43,6 +44,13 @@ type Config struct {
 	// down (e.g. a bad query pattern hammering the DB) without taking the
 	// rest of the service with it.
 	FeatureCatalogSearchEnabled bool
+
+	// IAMServiceURL is where every protected route checks its required
+	// permission (ADR-012-iam-service-scope.md). Empty by default — a
+	// rollout decision, not an oversight: an unset URL disables the
+	// authorization check entirely (router.go), so adopting lms-iam never
+	// requires touching this service's required configuration first.
+	IAMServiceURL string
 }
 
 func Load() (*Config, error) {
@@ -77,6 +85,8 @@ func Load() (*Config, error) {
 		CORSOrigin: getEnv("CORS_ORIGIN", "*"),
 
 		FeatureCatalogSearchEnabled: getBoolEnv("FEATURE_CATALOG_SEARCH_ENABLED", true),
+
+		IAMServiceURL: getEnv("IAM_SERVICE_URL", ""),
 	}
 
 	if cfg.InternalJWTSecret == "" {
