@@ -13,6 +13,8 @@ import (
 
 	httpserver "github.com/code-corhuila/lms-catalog-api/internal/adapter/in/httpapi"
 	"github.com/code-corhuila/lms-catalog-api/internal/adapter/in/httpapi/handler"
+	"github.com/code-corhuila/lms-catalog-api/internal/adapter/in/httpapi/middleware"
+	iamclient "github.com/code-corhuila/lms-catalog-api/internal/adapter/out/iamclient"
 	"github.com/code-corhuila/lms-catalog-api/internal/adapter/out/persistence"
 	"github.com/code-corhuila/lms-catalog-api/internal/application/usecase"
 	"github.com/code-corhuila/lms-catalog-api/internal/config"
@@ -59,6 +61,13 @@ func run() error {
 	deleteBookUseCase := usecase.NewDeleteBook(bookRepo)
 	bookHandler := handler.NewBookHandler(createBookUseCase, loanBookCopyUseCase, returnBookCopyUseCase, searchBooksUseCase, updateBookUseCase, deleteBookUseCase)
 
+	// Authorizer stays nil (disabling the permission check, router.go) when
+	// IAM_SERVICE_URL isn't set — ADR-012's additive, opt-in rollout.
+	var authorizer middleware.Authorizer
+	if cfg.IAMServiceURL != "" {
+		authorizer = iamclient.NewClient(cfg.IAMServiceURL, cfg.InternalJWTSecret)
+	}
+
 	router := httpserver.NewRouter(httpserver.RouterConfig{
 		DB:                          pool,
 		JWTPublicKey:                cfg.JWTPublicKey,
@@ -66,6 +75,7 @@ func run() error {
 		CORSOrigin:                  cfg.CORSOrigin,
 		Books:                       bookHandler,
 		FeatureCatalogSearchEnabled: cfg.FeatureCatalogSearchEnabled,
+		Authorizer:                  authorizer,
 	})
 
 	srv := &http.Server{
