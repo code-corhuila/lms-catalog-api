@@ -48,6 +48,13 @@ Administrator session; **HS256**, verified with a separate `INTERNAL_JWT_SECRET`
 this service only validates, it never mints one itself. Never the same key for both — see
 `internal/adapter/in/httpapi/middleware/auth.go`'s doc comment for why.
 
+## Internal caller allow-list (ADR-013)
+
+`POST /books/{id}/loan-copy` and `POST /books/{id}/return-copy` additionally require
+`sub=circulation-service` on the HS256 token (`middleware.RequireCaller`) — the only legitimate
+caller today. A valid internal token minted for any other service, or a real Administrator
+session, gets `403` on these two routes. Closes **SEC-03** from the week-13 threat model (T1/T2).
+
 ## Known gaps against `rules/2-anexos/C-api-hexagonal.md`
 
 - **Idempotent creation is durable now, not provisional.** `POST /books` honors
