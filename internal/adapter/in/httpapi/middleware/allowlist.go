@@ -19,7 +19,9 @@ func RequireCaller(allowed ...string) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			caller := AdministratorID(r.Context())
 			if _, ok := allowedSet[caller]; !ok {
-				writeAuthzFailure(w, http.StatusForbidden, "FORBIDDEN", "This route is not reachable by this caller")
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusForbidden)
+				_, _ = w.Write([]byte(`{"error":"FORBIDDEN","message":"This route is not reachable by this caller"}`))
 				return
 			}
 			next.ServeHTTP(w, r)
