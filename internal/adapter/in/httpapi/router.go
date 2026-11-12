@@ -52,6 +52,7 @@ func NewRouter(cfg RouterConfig) http.Handler {
 				}
 				books.With(middleware.RequireCaller("circulation-service")).Post("/{id}/loan-copy", cfg.Books.LoanCopy)     // ADR-013: internal-only
 				books.With(middleware.RequireCaller("circulation-service")).Post("/{id}/return-copy", cfg.Books.ReturnCopy) // ADR-013: internal-only
+				books.With(middleware.RequireCaller("lms-worker")).Post("/reindex", cfg.Books.Reindex)                      // ADR-013: internal-only
 				books.Patch("/{id}", cfg.Books.Update)                // HU-09
 				books.Delete("/{id}", cfg.Books.Delete)
 			})

@@ -57,7 +57,8 @@ func run() error {
 	searchBooksUseCase := usecase.NewSearchBooks(bookRepo)
 	updateBookUseCase := usecase.NewUpdateBook(bookRepo)
 	deleteBookUseCase := usecase.NewDeleteBook(bookRepo)
-	bookHandler := handler.NewBookHandler(createBookUseCase, loanBookCopyUseCase, returnBookCopyUseCase, searchBooksUseCase, updateBookUseCase, deleteBookUseCase)
+	reindexUseCase := usecase.NewReindex(log)
+	bookHandler := handler.NewBookHandler(createBookUseCase, loanBookCopyUseCase, returnBookCopyUseCase, searchBooksUseCase, updateBookUseCase, deleteBookUseCase, reindexUseCase)
 
 	router := httpserver.NewRouter(httpserver.RouterConfig{
 		DB:                          pool,
