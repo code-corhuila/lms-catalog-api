@@ -43,6 +43,11 @@ type Config struct {
 	// down (e.g. a bad query pattern hammering the DB) without taking the
 	// rest of the service with it.
 	FeatureCatalogSearchEnabled bool
+
+	// IAMServiceURL is where lms-iam's GET /api/v1/iam/authorize lives
+	// (ADR-012) — called before POST/PATCH/DELETE /books
+	// (RequirePermission middleware).
+	IAMServiceURL string
 }
 
 func Load() (*Config, error) {
@@ -77,6 +82,8 @@ func Load() (*Config, error) {
 		CORSOrigin: getEnv("CORS_ORIGIN", "*"),
 
 		FeatureCatalogSearchEnabled: getBoolEnv("FEATURE_CATALOG_SEARCH_ENABLED", true),
+
+		IAMServiceURL: getEnv("IAM_SERVICE_URL", "http://iam-service:8080"),
 	}
 
 	if cfg.InternalJWTSecret == "" {

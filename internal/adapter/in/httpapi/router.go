@@ -20,6 +20,12 @@ type RouterConfig struct {
 	CORSOrigin                  string
 	Books                       *handler.BookHandler
 	FeatureCatalogSearchEnabled bool
+	// IAMAuthorizer backs RequirePermission on the destructive /books
+	// routes (ADR-012) — closes part of the risk-9 finding in
+	// library-docs/05-architecture/security/stride-MENESESLUIS-bot.md §4
+	// row E: a leaked internal token could previously rewrite the
+	// catalog with no role check at all.
+	IAMAuthorizer middleware.Authorizer
 }
 
 // NewRouter builds the chi router with the base middleware stack, health
@@ -40,7 +46,8 @@ func NewRouter(cfg RouterConfig) http.Handler {
 			protected.Use(middleware.RequireAuth(cfg.JWTPublicKey, cfg.InternalJWTSecret))
 
 			protected.Route("/books", func(books chi.Router) {
-				books.Post("/", cfg.Books.Create) // HU-04
+				books.With(middleware.RequirePermission("books:write", cfg.IAMAuthorizer)).
+					Post("/", cfg.Books.Create) // HU-04, ADR-012
 				// FEATURE_CATALOG_SEARCH_ENABLED (week 9, config hardening):
 				// default on; exists so search can be turned off per-
 				// environment without a deploy. When off, GET isn't
@@ -52,8 +59,11 @@ func NewRouter(cfg RouterConfig) http.Handler {
 				}
 				books.With(middleware.RequireCaller("circulation-service")).Post("/{id}/loan-copy", cfg.Books.LoanCopy)     // ADR-013: internal-only
 				books.With(middleware.RequireCaller("circulation-service")).Post("/{id}/return-copy", cfg.Books.ReturnCopy) // ADR-013: internal-only
-				books.Patch("/{id}", cfg.Books.Update)                // HU-09
-				books.Delete("/{id}", cfg.Books.Delete)
+				books.With(middleware.RequireCaller("lms-worker")).Post("/reindex", cfg.Books.Reindex)                      // ADR-013: internal-only
+				books.With(middleware.RequirePermission("books:write", cfg.IAMAuthorizer)).
+					Patch("/{id}", cfg.Books.Update) // HU-09, ADR-012
+				books.With(middleware.RequirePermission("books:delete", cfg.IAMAuthorizer)).
+					Delete("/{id}", cfg.Books.Delete) // ADR-012
 			})
 		})
 	})
