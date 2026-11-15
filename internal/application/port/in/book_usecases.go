@@ -46,3 +46,11 @@ type UpdateBookUseCase interface {
 type DeleteBookUseCase interface {
 	Execute(ctx context.Context, id string) error
 }
+
+// ReindexUseCase is ADR-009's third lms-worker responsibility. This is a
+// deliberate stub — no search index/engine exists in this project yet
+// (search is a plain SQL query, see search_books.go) — see
+// usecase.Reindex. Internal-only (ADR-013).
+type ReindexUseCase interface {
+	Execute(ctx context.Context) error
+}

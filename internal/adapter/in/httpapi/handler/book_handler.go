@@ -26,10 +26,11 @@ type BookHandler struct {
 	searchBooks    in.SearchBooksUseCase
 	updateBook     in.UpdateBookUseCase
 	deleteBook     in.DeleteBookUseCase
+	reindex        in.ReindexUseCase
 }
 
-func NewBookHandler(createBook in.CreateBookUseCase, loanBookCopy in.LoanBookCopyUseCase, returnBookCopy in.ReturnBookCopyUseCase, searchBooks in.SearchBooksUseCase, updateBook in.UpdateBookUseCase, deleteBook in.DeleteBookUseCase) *BookHandler {
-	return &BookHandler{createBook: createBook, loanBookCopy: loanBookCopy, returnBookCopy: returnBookCopy, searchBooks: searchBooks, updateBook: updateBook, deleteBook: deleteBook}
+func NewBookHandler(createBook in.CreateBookUseCase, loanBookCopy in.LoanBookCopyUseCase, returnBookCopy in.ReturnBookCopyUseCase, searchBooks in.SearchBooksUseCase, updateBook in.UpdateBookUseCase, deleteBook in.DeleteBookUseCase, reindex in.ReindexUseCase) *BookHandler {
+	return &BookHandler{createBook: createBook, loanBookCopy: loanBookCopy, returnBookCopy: returnBookCopy, searchBooks: searchBooks, updateBook: updateBook, deleteBook: deleteBook, reindex: reindex}
 }
 
 func clampPage(page int) int {
@@ -259,4 +260,18 @@ func (h *BookHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// Reindex — POST /books/reindex (ADR-009). Internal-only: reachable only by
+// lms-worker, enforced by RequireCaller (ADR-013). See usecase.Reindex —
+// deliberately a stub, no search index exists yet.
+func (h *BookHandler) Reindex(w http.ResponseWriter, r *http.Request) {
+	traceID := middleware.FromContext(r.Context())
+
+	if err := h.reindex.Execute(r.Context()); err != nil {
+		response.Error(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal server error", traceID)
+		return
+	}
+
+	response.JSON(w, http.StatusOK, map[string]any{"status": "ok"})
 }
